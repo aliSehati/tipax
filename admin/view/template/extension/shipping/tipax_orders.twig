@@ -1,0 +1,301 @@
+{{ header }}{{ column_left }}
+<div id="content">
+  <div class="page-header">
+    <div class="container-fluid">
+      <div class="pull-right">
+  <button type="button" id="bulk-submit" class="btn btn-primary" disabled><i class="fa fa-upload"></i> ارسال گروهی</button>
+  <button type="button" id="bulk-cancel" class="btn btn-danger" disabled><i class="fa fa-times"></i> ابطال گروهی</button>
+  <a href="{{ sale_order_url }}" class="btn btn-default"><i class="fa fa-reply"></i></a>
+      </div>
+      <h1>{{ heading_title }}</h1>
+      <ul class="breadcrumb">
+        <li><a href="{{ dashboard_url }}">داشبورد</a></li>
+        <li><a href="{{ tipax_main_url }}">تیپاکس</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="container-fluid">
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title"><i class="fa fa-truck"></i> سفارشات تیپاکس</h3>
+      </div>
+      <div class="panel-body">
+        <div class="row" style="margin-bottom:10px">
+          <div class="col-sm-12">
+            <ul class="nav nav-pills">
+              <li{% if filter == 'all' %} class="active"{% endif %}>
+                <a href="{{ filter_urls.all }}">همه</a>
+              </li>
+              <li{% if filter == 'failed' %} class="active"{% endif %}>
+                <a href="{{ filter_urls.failed }}">خطادار</a>
+              </li>
+              <li{% if filter == 'submitted' %} class="active"{% endif %}>
+                <a href="{{ filter_urls.submitted }}">ارسال شده</a>
+              </li>
+              <li{% if filter == 'pending' %} class="active"{% endif %}>
+                <a href="{{ filter_urls.pending }}">در انتظار</a>
+              </li>
+              <li{% if filter == 'cancelled' %} class="active"{% endif %}>
+                <a href="{{ filter_urls.cancelled }}">ابطال شده</a>
+              </li>
+              <li class="pull-left" style="float:left">
+                <button type="button" id="toggle-adv-filter" class="btn btn-info btn-sm" style="margin-top:5px">فیلتر پیشرفته</button>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div id="adv-filter-box" class="panel panel-info" style="display:none;margin-bottom:15px;">
+          <div class="panel-heading">
+            <h3 class="panel-title" style="font-size:13px">فیلتر پیشرفته</h3>
+          </div>
+          <div class="panel-body">
+            <form method="get" id="adv-filter-form" class="form-inline" style="direction:rtl;text-align:right">
+              <input type="hidden" name="route" value="extension/shipping/tipax"/>
+              <input type="hidden" name="user_token" value="{{ user_token }}"/>
+              <input type="hidden" name="action" value="orders"/>
+              <input type="hidden" name="filter" value="{{ filter }}"/>
+              <div class="form-group" style="margin:5px">
+                <label for="f_order_id">شناسه سفارش:</label>
+                <input type="text" name="f_order_id" id="f_order_id" value="{{ f_order_id }}" class="form-control" style="width:120px"/>
+              </div>
+              <div class="form-group" style="margin:5px">
+                <label for="f_customer">نام / موبایل:</label>
+                <input type="text" name="f_customer" id="f_customer" value="{{ f_customer }}" class="form-control" style="width:160px" placeholder="بخشی از نام یا شماره"/>
+              </div>
+              <div class="form-group" style="margin:5px">
+                <label for="f_city">شهر گیرنده:</label>
+                <input type="text" name="f_city" id="f_city" value="{{ f_city }}" class="form-control" style="width:150px" placeholder="مثلاً تهران"/>
+              </div>
+              <div class="form-group" style="margin:5px">
+                <button type="submit" class="btn btn-primary"><i class="fa fa-filter"></i> اعمال</button>
+                <a href="{{ clear_filter_url }}" class="btn btn-default"><i class="fa fa-times"></i> پاکسازی</a>
+              </div>
+            </form>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-bordered table-hover">
+            <thead>
+              <tr>
+                <th style="width:1px;text-align:center;"><input type="checkbox" onclick="$('input[name*=\'selected\']').prop('checked', this.checked).trigger('change');"/></th>
+                <th>#</th>
+                <th>سفارش فروشگاه</th>
+                <th>مشتری</th>
+                <th>شهر گیرنده</th>
+                <th>Tracking Codes</th>
+                <th>وضعیت</th>
+                <th>خطا</th>
+                <th class="text-right">اقدامات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if orders %}
+                {% for o in orders %}
+                <tr{% if o.status == 'failed' %} class="danger"{% endif %}>
+                  <td class="text-center"><input type="checkbox" name="selected[]" value="{{ o.order_id }}" onchange="updateBulkButtons()"/></td>
+                  <td>{{ loop.index }}</td>
+                  <td>#{{ o.order_id }}</td>
+                  <td>{{ o.firstname }} {{ o.lastname }}<br/><small>{{ o.telephone }}</small></td>
+                  <td>{{ o.shipping_city }}</td>
+                  <td>{{ o.tracking_codes }}</td>
+                  <td>
+                    {% if o.status == 'pending' %}
+                      <span class="label label-warning">در انتظار</span>
+                    {% elseif o.status == 'submitted' %}
+                      <span class="label label-success">ارسال شده</span>
+                    {% elseif o.status == 'failed' %}
+                      <span class="label label-danger">خطا</span>
+                      {% if o.retry_count > 0 %}
+                        <small>({{ o.retry_count }} تلاش)</small>
+                      {% endif %}
+                    {% elseif o.status == 'cancelled' %}
+                      <span class="label label-default">ابطال شده</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if o.status == 'failed' and o.error_message %}
+                      <span class="text-danger" title="{{ o.error_message }}">
+                        <i class="fa fa-exclamation-triangle"></i>
+                        {{ o.error_message }}
+                      </span>
+                      {% if o.last_error_at %}
+                        <br><small class="text-muted">{{ o.last_error_at }}</small>
+                      {% endif %}
+                    {% else %}
+                      -
+                    {% endif %}
+                  </td>
+                  <td class="text-right">
+                    {% if o.status == 'failed' %}
+                      <button class="btn btn-warning btn-sm" onclick="retryTipax({{ o.order_id }})" title="تلاش مجدد">
+                        <i class="fa fa-refresh"></i>
+                      </button>
+                    {% endif %}
+                    {% if o.status == 'submitted' %}
+                      <button class="btn btn-danger btn-sm" onclick="cancelTipax({{ o.order_id }})">{{ button_cancel_tipax }}</button>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="9" class="text-center">موردی یافت نشد</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+        <div class="row">
+          <div class="col-sm-6 text-left">{{ pagination }}</div>
+          <div class="col-sm-6 text-right">{{ results }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Loading overlay helpers
+function showLoading(message) {
+  var existing = document.getElementById('tipax-loading-overlay');
+  if (!existing) {
+    var div = document.createElement('div');
+    div.id = 'tipax-loading-overlay';
+    div.style.position = 'fixed';
+    div.style.top = 0;
+    div.style.left = 0;
+    div.style.right = 0;
+    div.style.bottom = 0;
+    div.style.background = 'rgba(0,0,0,0.45)';
+    div.style.zIndex = 99999;
+    div.style.display = 'flex';
+    div.style.alignItems = 'center';
+    div.style.justifyContent = 'center';
+    div.style.direction = 'rtl';
+    div.innerHTML = '<div style="text-align:center;color:#fff;font-size:16px;line-height:1.7">' +
+      '<div style="margin-bottom:8px;font-size:26px;"><i class="fa fa-spinner fa-spin"></i></div>' +
+      '<span id="tipax-loading-message"></span>' +
+      '</div>';
+    document.body.appendChild(div);
+  }
+  document.getElementById('tipax-loading-message').textContent = message || 'لطفاً صبر کنید...';
+  document.getElementById('tipax-loading-overlay').style.display = 'flex';
+}
+function hideLoading() {
+  var el = document.getElementById('tipax-loading-overlay');
+  if (el) el.style.display = 'none';
+}
+
+// Toggle advanced filter box
+$('#toggle-adv-filter').on('click', function(){
+  $('#adv-filter-box').slideToggle(150);
+});
+// Auto-open if any filter value present
+if('{{ f_order_id }}' !== '' || '{{ f_customer }}' !== '' || '{{ f_city }}' !== '') {
+  $('#adv-filter-box').show();
+}
+
+function cancelTipax(orderId){
+  if(!confirm('سفارش تیپاکس ابطال شود؟')) return;
+  var url = '{{ cancel_order_url|raw }}';
+  showLoading('در حال ابطال سفارش...');
+  $.ajax({url:url,method:'POST',dataType:'json',data:{order_id:orderId}})
+    .done(function(j){ alert((j.success?'✓ ':'✗ ')+ (j.message||'')); if(j.success) location.reload(); })
+    .fail(function(){ alert('خطا'); })
+    .always(function(){ hideLoading(); });
+}
+
+var BULK_CANCEL_URL = '{{ bulk_cancel_url|raw }}';
+var BULK_SUBMIT_URL = '{{ bulk_submit_url|raw }}';
+
+function updateBulkButtons() {
+  var selected = $('input[name*="selected"]:checked').length;
+  // تعیین وضعیت سفارشات انتخاب‌شده
+  var anySelected = selected > 0;
+  var allPending = true;
+  var anySubmittedOrFailed = false;
+  $('input[name*="selected"]:checked').each(function(){
+    var tr = $(this).closest('tr');
+    var statusLabel = tr.find('td:nth-child(7) .label');
+    var statusText = statusLabel.text().trim();
+    if(statusText !== 'در انتظار') allPending = false;
+    if(statusText === 'ارسال شده' || statusText === 'خطا' || statusText === 'ابطال شده') anySubmittedOrFailed = true;
+  });
+  $('#bulk-cancel').prop('disabled', !anySelected || allPending); // ابطال روی pending نباشد
+  $('#bulk-submit').prop('disabled', !anySelected || !allPending); // ارسال گروهی فقط وقتی همه pending باشند
+}
+
+$('#bulk-cancel').on('click', function() {
+  var selected = [];
+  $('input[name*="selected"]:checked').each(function() {
+    selected.push($(this).val());
+  });
+  
+  if (selected.length === 0) {
+    alert('هیچ سفارشی انتخاب نشده است.');
+    return;
+  }
+  
+  if (!confirm(selected.length + ' سفارش انتخاب شده ابطال شود؟')) return;
+  
+  var btn = $(this).prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> در حال ابطال...');
+  
+  showLoading('در حال ابطال گروهی سفارشات...');
+  $.ajax({
+    url: BULK_CANCEL_URL,
+    method: 'POST',
+    dataType: 'json',
+    data: {order_ids: selected}
+  }).done(function(j) {
+    alert((j.success ? '✓ ' : '✗ ') + (j.message || ''));
+    if (j.success) location.reload();
+  }).fail(function() {
+    alert('خطا در ابطال گروهی');
+  }).always(function() {
+    btn.prop('disabled', false).html('<i class="fa fa-times"></i> ابطال گروهی');
+    hideLoading();
+  });
+});
+
+$('#bulk-submit').on('click', function(){
+  var selected = [];
+  $('input[name*="selected"]:checked').each(function(){ selected.push($(this).val()); });
+  if(selected.length===0) { alert('هیچ سفارشی انتخاب نشده است.'); return; }
+  if(!confirm(selected.length + ' سفارش انتخاب شده به تیپاکس ارسال شود؟')) return;
+  var btn = $(this).prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> در حال ارسال...');
+  showLoading('در حال ارسال گروهی سفارشات...');
+  $.ajax({
+    url: BULK_SUBMIT_URL,
+    method: 'POST',
+    dataType: 'json',
+    data: {order_ids: selected}
+  }).done(function(j){
+    alert((j.success ? '✓ ' : '✗ ') + (j.message || ''));
+    if(j.success) location.reload();
+  }).fail(function(){
+    alert('خطا در ارسال گروهی');
+  }).always(function(){
+    btn.prop('disabled', false).html('<i class="fa fa-upload"></i> ارسال گروهی');
+    hideLoading();
+  });
+});
+
+function retryTipax(orderId) {
+  if (!confirm('سفارش مجدداً به تیپاکس ارسال شود؟')) return;
+  showLoading('در حال ارسال سفارش...');
+  $.ajax({
+    url: '{{ submit_order_base_url|raw }}&order_id=' + orderId,
+    method: 'GET',
+    beforeSend: function() {
+      $('button').prop('disabled', true);
+    }
+  }).done(function() {
+    location.reload();
+  }).fail(function() {
+    alert('خطا در ارسال مجدد به تیپاکس');
+  }).always(function() {
+    $('button').prop('disabled', false);
+    hideLoading();
+  });
+}
+</script>
+{{ footer }}

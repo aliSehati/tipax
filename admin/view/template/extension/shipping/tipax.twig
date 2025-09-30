@@ -1,0 +1,602 @@
+{{ header }}{{ column_left }}
+<div id="content">
+  <div class="page-header">
+    <div class="container-fluid">
+      <div class="pull-right tipax-toolbar">
+        <!-- Wallet quick actions -->
+        <div class="input-group wallet-input-group">
+          <input type="number" id="wallet-charge" class="form-control" min="10000" step="1000" value="100000" />
+          <span class="input-group-btn">
+            <button type="button" id="charge-wallet" class="btn btn-success">{{ button_charge_wallet }}</button>
+          </span>
+        </div>
+        <div class="btn-group tipax-wallet-group">
+          <button type="button" id="check-wallet" class="btn btn-info">{{ button_check_wallet }}</button>
+          <span class="btn btn-default disabled" id="wallet-badge">
+            <i class="fa fa-credit-card"></i>
+            <span id="wallet-balance">...</span>
+          </span>
+        </div>
+        <!-- Save and orders -->
+        <button type="submit" form="form-tipax" data-toggle="tooltip" title="{{ button_save }}" class="btn btn-primary"><i class="fa fa-save"></i></button>
+        <a href="{{ orders_url }}" data-toggle="tooltip" title="{{ button_manage_orders }}" class="btn btn-warning"><i class="fa fa-list"></i></a>
+      </div>
+      <h1>{{ heading_title }}</h1>
+      <ul class="breadcrumb">
+        {% for breadcrumb in breadcrumbs %}
+        <li><a href="{{ breadcrumb.href }}">{{ breadcrumb.text }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="container-fluid">
+    {% if error_warning %}
+    <div class="alert alert-danger alert-dismissible"><i class="fa fa-exclamation-circle"></i> {{ error_warning }}
+      <button type="button" class="close" data-dismiss="alert">&times;</button>
+    </div>
+    {% endif %}
+    {% if success %}
+    <div class="alert alert-success alert-dismissible"><i class="fa fa-exclamation-circle"></i> {{ success }}
+      <button type="button" class="close" data-dismiss="alert">&times;</button>
+    </div>
+    {% endif %}
+
+    <form action="{{ action }}" method="post" enctype="multipart/form-data" id="form-tipax" class="form-horizontal">
+      <div class="panel panel-default">
+        <div class="panel-heading">
+          <h3 class="panel-title"><i class="fa fa-pencil"></i> {{ text_edit }}</h3>
+          <span class="pull-right"><kbd style="padding: 5px 7px;border-radius: 5px;">{{module_version}}</kbd></span>
+        </div>
+        <div class="panel-body">
+          <ul class="nav nav-tabs">
+            <li class="active"><a href="#tab-general" data-toggle="tab">{{ tab_general }}</a></li>
+            <li><a href="#tab-services" data-toggle="tab">{{ tab_services }}</a></li>
+            <li><a href="#tab-sender" data-toggle="tab">{{ tab_sender }}</a></li>
+            <li><a href="#tab-cities" data-toggle="tab">{{ tab_cities }}</a></li>
+            
+          </ul>
+          <div class="tab-content">
+        <div class="tab-pane active" id="tab-general">
+          <div class="form-group required">
+            <label class="col-sm-2 control-label" for="input-username">{{ entry_username }}</label>
+            <div class="col-sm-10">
+              <input type="text" name="shipping_tipax_username" value="{{ shipping_tipax_username }}"
+                id="input-username" class="form-control" />
+              {% if error_username %}<div class="text-danger">{{ error_username }}</div>{% endif %}
+            </div>
+          </div>
+          <div class="form-group required">
+            <label class="col-sm-2 control-label" for="input-password">{{ entry_password }}</label>
+            <div class="col-sm-10">
+              <input type="password" name="shipping_tipax_password" value="{{ shipping_tipax_password }}"
+                id="input-password" class="form-control" />
+              {% if error_password %}<div class="text-danger">{{ error_password }}</div>{% endif %}
+            </div>
+          </div>
+          <div class="form-group required">
+            <label class="col-sm-2 control-label" for="input-api-key">{{ entry_api_key }}</label>
+            <div class="col-sm-10">
+              <div class="input-group">
+                <input type="text" name="shipping_tipax_api_key" value="{{ shipping_tipax_api_key }}" id="input-api-key"
+                  class="form-control" />
+                <span class="input-group-btn">
+                  <button type="button" id="test-connection" class="btn btn-info">{{ button_test_connection }}</button>
+                </span>
+              </div>
+              <div class="help-block">{{ help_api_key }}</div>
+              {% if error_api_key %}<div class="text-danger">{{ error_api_key }}</div>{% endif %}
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-status">{{ entry_status }}</label>
+            <div class="col-sm-10">
+              <select name="shipping_tipax_status" id="input-status" class="form-control">
+                <option value="1" {% if shipping_tipax_status %} selected{% endif %}>{{ text_enabled }}</option>
+                <option value="0" {% if not shipping_tipax_status %} selected{% endif %}>{{ text_disabled }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-sort-order">{{ entry_sort_order }}</label>
+            <div class="col-sm-10">
+              <input type="text" name="shipping_tipax_sort_order" value="{{ shipping_tipax_sort_order }}"
+                id="input-sort-order" class="form-control" />
+            </div>
+          </div>
+
+          <hr />
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-auto-submit">{{ entry_auto_submit }}</label>
+            <div class="col-sm-10">
+              <select name="shipping_tipax_auto_submit" id="input-auto-submit" class="form-control"
+                onchange="toggleAutoSubmitStatuses()">
+                <option value="1" {% if shipping_tipax_auto_submit %} selected{% endif %}>{{ text_enabled }}</option>
+                <option value="0" {% if not shipping_tipax_auto_submit %} selected{% endif %}>{{ text_disabled }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" id="auto-submit-statuses-group" {% if not shipping_tipax_auto_submit
+            %}style="display: none;" {% endif %}>
+            <label class="col-sm-2 control-label">{{ entry_auto_submit_statuses }}</label>
+            <div class="col-sm-10">
+              <div class="well well-sm" style="height: 150px; overflow: auto;">
+                {% for status in order_statuses %}
+                <div class="checkbox"><label>
+                    <input type="checkbox" name="shipping_tipax_auto_submit_statuses[]"
+                      value="{{ status.order_status_id }}" {% if status.order_status_id in
+                      shipping_tipax_auto_submit_statuses %} checked{% endif %} />
+                    {{ status.name }}
+                  </label></div>
+                {% endfor %}
+              </div>
+              <div class="help-block">{{ help_auto_submit_statuses }}</div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-auto-submit-on-status-change">{{
+              entry_auto_submit_on_status_change }}</label>
+            <div class="col-sm-10">
+              <select name="shipping_tipax_auto_submit_on_status_change" id="input-auto-submit-on-status-change"
+                class="form-control" onchange="toggleAutoSubmitOnStatusChangeStatuses()">
+                <option value="1" {% if shipping_tipax_auto_submit_on_status_change %} selected{% endif %}>{{
+                  text_enabled }}</option>
+                <option value="0" {% if not shipping_tipax_auto_submit_on_status_change %} selected{% endif %}>{{
+                  text_disabled }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" id="auto-submit-on-status-change-statuses-group" {% if not
+            shipping_tipax_auto_submit_on_status_change %}style="display: none;" {% endif %}>
+            <label class="col-sm-2 control-label">{{ entry_auto_submit_on_status_change_statuses }}</label>
+            <div class="col-sm-10">
+              <div class="well well-sm" style="height: 150px; overflow: auto;">
+                {% for status in order_statuses %}
+                <div class="checkbox"><label>
+                    <input type="checkbox" name="shipping_tipax_auto_submit_on_status_change_statuses[]"
+                      value="{{ status.order_status_id }}" {% if status.order_status_id in
+                      shipping_tipax_auto_submit_on_status_change_statuses %} checked{% endif %} />
+                    {{ status.name }}
+                  </label></div>
+                {% endfor %}
+              </div>
+              <div class="help-block">{{ help_auto_submit_on_status_change_statuses }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-pane" id="tab-services">
+          {# <div class="alert alert-info">{{ text_services_hint }}</div> #}
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-payment-type">{{ entry_payment_type }}</label>
+            <div class="col-sm-10">
+              <select name="shipping_tipax_payment_type" id="input-payment-type" class="form-control">
+                {% for k, v in payment_types %}
+                <option value="{{ k }}" {% if k==shipping_tipax_payment_type %} selected{% endif %}>{{ v }} ({{ k }})
+                </option>
+                {% endfor %}
+              </select>
+              <div class="help-block">{{ help_payment_type }}</div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-default-weight">{{ entry_default_weight_kg }}</label>
+            <div class="col-sm-10">
+              <input type="number" step="0.01" min="0" name="shipping_tipax_default_weight_kg" id="input-default-weight"
+                class="form-control" value="{{ shipping_tipax_default_weight_kg }}" />
+              <div class="help-block">{{ help_default_weight_kg }}</div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-default-length">{{ entry_default_length_cm }}</label>
+            <div class="col-sm-10">
+              <input type="number" step="1" min="1" name="shipping_tipax_default_length_cm" id="input-default-length"
+                class="form-control" value="{{ shipping_tipax_default_length_cm }}" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-default-width">{{ entry_default_width_cm }}</label>
+            <div class="col-sm-10">
+              <input type="number" step="1" min="1" name="shipping_tipax_default_width_cm" id="input-default-width"
+                class="form-control" value="{{ shipping_tipax_default_width_cm }}" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-default-height">{{ entry_default_height_cm }}</label>
+            <div class="col-sm-10">
+              <input type="number" step="1" min="1" name="shipping_tipax_default_height_cm" id="input-default-height"
+                class="form-control" value="{{ shipping_tipax_default_height_cm }}" />
+              <div class="help-block">{{ help_default_dimensions }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-pane" id="tab-sender">
+          <div class="alert alert-info">{{ text_sender_hint }}</div>
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="sender-mode">{{ entry_sender_mode }}</label>
+            <div class="col-sm-10">
+              <select name="shipping_tipax_sender_mode" id="sender-mode" class="form-control">
+                <option value="saved" {% if shipping_tipax_sender_mode=='saved' %} selected{% endif %}>{{
+                  text_saved_address }}</option>
+                <option value="map" {% if shipping_tipax_sender_mode=='map' %} selected{% endif %}>{{
+                  text_map_address }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="sender-saved" {% if shipping_tipax_sender_mode !='saved' %}style="display:none" {% endif %}>
+            <div class="form-group">
+              <label class="col-sm-2 control-label"></label>
+              <div class="col-sm-10">
+                <button type="button" id="load-addresses" class="btn btn-success">{{ button_load_addresses
+                  }}</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="col-sm-2 control-label">{{ entry_sender_saved_address }}</label>
+              <div class="col-sm-10">
+                <select name="shipping_tipax_sender_selected_address_id" id="sender-address-select"
+                  class="form-control">
+                  <option value="">{{ text_none }}</option>
+                  {% for a in saved_addresses %}
+                  <option value="{{ a.tipax_address_id }}" {% if
+                    a.tipax_address_id==shipping_tipax_sender_selected_address_id %} selected{% endif %}>{{
+                    a.full_address }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div id="sender-map" {% if shipping_tipax_sender_mode=='saved' %}style="display:none" {% endif %}>
+            <div id="map-sender" style="height:320px;border:1px solid #ddd;margin-bottom:10px"></div>
+            <div class="form-group required">
+              <label class="col-sm-2 control-label" for="sender-name">{{ entry_sender_name }}</label>
+              <div class="col-sm-10">
+                <input type="text" name="shipping_tipax_sender_name" value="{{ shipping_tipax_sender_name }}"
+                  id="sender-name" class="form-control" />
+                {% if error_sender_name %}<div class="text-danger">{{ error_sender_name }}</div>{% endif %}
+              </div>
+            </div>
+            <div class="form-group required">
+              <label class="col-sm-2 control-label" for="sender-mobile">{{ entry_sender_mobile }}</label>
+              <div class="col-sm-10">
+                <input type="text" name="shipping_tipax_sender_mobile" value="{{ shipping_tipax_sender_mobile }}"
+                  id="sender-mobile" class="form-control" />
+                {% if error_sender_mobile %}<div class="text-danger">{{ error_sender_mobile }}</div>{% endif %}
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="col-sm-2 control-label" for="sender-phone">{{ entry_sender_phone }}</label>
+              <div class="col-sm-10"><input type="text" name="shipping_tipax_sender_phone"
+                  value="{{ shipping_tipax_sender_phone }}" id="sender-phone" class="form-control" /></div>
+            </div>
+            <div class="form-group required">
+              <label class="col-sm-2 control-label" for="sender-address">{{ entry_sender_full_address }}</label>
+              <div class="col-sm-10">
+                <textarea name="shipping_tipax_sender_full_address" id="sender-address" rows="3"
+                  class="form-control">{{ shipping_tipax_sender_full_address }}</textarea>
+                {% if error_sender_address %}<div class="text-danger">{{ error_sender_address }}</div>{% endif %}
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="col-sm-2 control-label" for="sender-postal">{{ entry_sender_postal_code }}</label>
+              <div class="col-sm-10"><input type="text" name="shipping_tipax_sender_postal_code"
+                  value="{{ shipping_tipax_sender_postal_code }}" id="sender-postal" class="form-control" /></div>
+            </div>
+
+            <div class="form-group required">
+              <label class="col-sm-2 control-label" for="sender-city">{{ entry_sender_city_id }}</label>
+              <div class="col-sm-10">
+                <select name="shipping_tipax_sender_city_id" id="sender-city" class="form-control">
+                  <option value="">{{ text_none }}</option>
+                  {% for c in tipax_cities %}
+                  <option value="{{ c.tipax_city_id }}" {% if c.tipax_city_id==shipping_tipax_sender_city_id %}
+                    selected{% endif %}>{{ c.city_title }} ({{ c.tipax_city_id }})</option>
+                  {% endfor %}
+                </select>
+                <div class="help-block">اگر لیست خالی است، ابتدا «{{ button_sync_cities }}» را در تب «{{ tab_cities
+                  }}» اجرا کنید.</div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="col-sm-2 control-label" for="sender-no">{{ entry_sender_no }}</label>
+              <div class="col-sm-10">
+                <input type="text" name="shipping_tipax_sender_no" value="{{ shipping_tipax_sender_no }}" id="sender-no"
+                  class="form-control" placeholder="{{ entry_sender_no }}" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="col-sm-2 control-label" for="sender-unit">{{ entry_sender_unit }}</label>
+              <div class="col-sm-10">
+                <input type="text" name="shipping_tipax_sender_unit" value="{{ shipping_tipax_sender_unit }}"
+                  id="sender-unit" class="form-control" placeholder="{{ entry_sender_unit }}" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="col-sm-2 control-label" for="sender-floor">{{ entry_sender_floor }}</label>
+              <div class="col-sm-10">
+                <input type="text" name="shipping_tipax_sender_floor" value="{{ shipping_tipax_sender_floor }}"
+                  id="sender-floor" class="form-control" placeholder="{{ entry_sender_floor }}" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="col-sm-2 control-label">مختصات</label>
+              <div class="col-sm-10">
+                <div class="row">
+                  <div class="col-sm-6"><input type="text" name="shipping_tipax_sender_lat"
+                      value="{{ shipping_tipax_sender_lat }}" placeholder="{{ entry_sender_lat }}" class="form-control"
+                      id="sender-lat" /></div>
+                  <div class="col-sm-6"><input type="text" name="shipping_tipax_sender_lng"
+                      value="{{ shipping_tipax_sender_lng }}" placeholder="{{ entry_sender_lng }}" class="form-control"
+                      id="sender-lng" /></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-pane" id="tab-cities">
+          {% if unmatched_count and unmatched_count > 0 %}
+          <div class="alert alert-warning">
+            <i class="fa fa-exclamation-triangle"></i>
+            توجه: {{ unmatched_count }} شهر تیپاکس هنوز با شهرهای اپن‌کارت تطابق داده نشده‌اند.
+            <a class="alert-link" href="{{ mapping_url }}">مدیریت تطابق شهرها</a>
+          </div>
+          {% endif %}
+          {% if unmatched_states_count and unmatched_states_count > 0 %}
+          <div class="alert alert-warning">
+            <i class="fa fa-exclamation-triangle"></i>
+            توجه: {{ unmatched_states_count }} استان تیپاکس هنوز با استان‌های اپن‌کارت تطابق داده نشده‌اند.
+            <a class="alert-link" href="{{ mapping_state_url }}">مدیریت تطابق استان‌ها</a>
+          </div>
+          {% endif %}
+          <div class="form-group">
+            <label class="col-sm-2 control-label">تعداد شهرهای تیپاکس</label>
+            <div class="col-sm-10">
+              <p class="form-control-static">{{ cities_count }} شهر</p>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="col-sm-2 control-label"></label>
+            <div class="col-sm-10">
+              <button type="button" id="sync-cities" class="btn btn-success">{{ button_sync_cities }}</button>
+              <a href="{{ mapping_url }}" class="btn btn-default">{{ button_open_mapping }}</a>
+              <a href="{{ mapping_state_url }}" class="btn btn-default">{{ button_open_state_mapping }}</a>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="col-sm-2 control-label">URL کران همگام‌سازی</label>
+            <div class="col-sm-10">
+              <div class="input-group">
+                <input type="text" readonly class="form-control" id="cron-sync-cities-url"
+                  value="{{ cron_sync_cities_url }}" onclick="this.select();" />
+                <span class="input-group-btn">
+                  <button type="button" class="btn btn-default" onclick="copyCronUrl()"><i class="fa fa-copy"></i>
+                    کپی</button>
+                </span>
+              </div>
+              <div class="help-block">این آدرس را برای کران سرور استفاده کنید تا شهرهای تیپاکس به‌صورت دوره‌ای به‌روز
+                شوند. نمونه کران
+                (روزانه):<br><code>wget -q -O - '{{ cron_sync_cities_url }}' &gt;/dev/null 2&gt;&1</code></div>
+            </div>
+          </div>
+          <div class="help-block">{{ text_mapping_hint }}</div>
+        </div>
+
+        
+
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<link rel="stylesheet" href="view/javascript/leaflet/leaflet.css" />
+<script src="view/javascript/leaflet/leaflet.js"></script>
+
+<style>
+  /* Fix wallet quick actions layout */
+  .wallet-input-group {
+    width: 260px;
+    display: inline-flex;
+    vertical-align: middle;
+    margin-right: 10px !important;
+    margin-left: 100px !important;
+  }
+  #wallet-badge {
+    min-width: 80px;
+    text-align: center;
+  }
+  /* Ensure input and button sit on one line in Bootstrap 3 within header */
+  .wallet-input-group .form-control { width: 100%; }
+  .wallet-input-group .input-group-btn > .btn { height: 36px; }
+  .page-header .btn-group { vertical-align: middle; }
+  .page-header .btn-group #wallet-badge { margin-left: 5px; }
+
+  /* Responsive toolbar container */
+  .tipax-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .tipax-toolbar > .btn,
+  .tipax-toolbar > .btn-group,
+  .tipax-toolbar > .input-group { margin: 0; }
+  .tipax-toolbar .wallet-input-group { flex: 0 1 260px; }
+  .tipax-toolbar .tipax-wallet-group { flex: 0 0 auto; }
+
+  @media (max-width: 768px) {
+    .tipax-toolbar { justify-content: flex-start; }
+    .tipax-toolbar .wallet-input-group { flex: 1 1 100%; margin-right: 0; }
+  }
+</style>
+
+<script>
+  (function ($) {
+    var senderMap, senderMarker;
+    function aj(url, method, data) { return $.ajax({ url: url, method: method || 'GET', dataType: 'json', data: data || {} }); }
+
+    // Format numbers with thousand separators (e.g., 123,456)
+    function formatThousands(n) {
+      var num = Number(n) || 0;
+      return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+
+    var TEST_CONNECTION_URL = '{{ test_connection_url|raw }}';
+    var CHECK_WALLET_URL = '{{ check_wallet_url|raw }}';
+    var CHARGE_WALLET_URL = '{{ charge_wallet_url|raw }}';
+    var SYNC_CITIES_URL = '{{ sync_cities_url|raw }}';
+    var LOAD_ADDRESSES_URL = '{{ load_addresses_url|raw }}';
+
+    $('#test-connection').on('click', function () {
+      var b = $(this).prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+      aj(TEST_CONNECTION_URL).done(function (j) { alert((j.success ? '✓ ' : '✗ ') + (j.message || '')); })
+        .fail(function (xhr) { alert('✗ ' + ((xhr.responseJSON && xhr.responseJSON.message) || 'خطای ارتباط')); })
+        .always(function () { b.prop('disabled', false).html('{{ button_test_connection }}'); });
+    });
+
+    $('#check-wallet').on('click', function () {
+      var b = $(this).prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+      aj(CHECK_WALLET_URL).done(function (j) {
+        if (j.success) {
+          var amount = Number(j.balance) || 0;
+          $('#wallet-balance').text(formatThousands(amount) + ' ریال');
+        } else alert('✗ ' + (j.message || ''));
+      }).fail(function (xhr) { alert('✗ ' + ((xhr.responseJSON && xhr.responseJSON.message) || 'خطای ارتباط')); })
+        .always(function () { b.prop('disabled', false).html('{{ button_check_wallet }}'); });
+    });
+
+    $('#charge-wallet').on('click', function () {
+      var v = parseInt($('#wallet-charge').val() || 0, 10);
+      if (isNaN(v) || v <= 0) { alert('{{ error_wallet_charge }}'); return; }
+      var b = $(this).prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+      aj(CHARGE_WALLET_URL, 'POST', { amount: v }).done(function (j) {
+        if (j.success && j.payment_url) { window.open(j.payment_url, '_blank'); } else alert('✗ ' + (j.message || ''));
+      }).fail(function (xhr) { alert('✗ ' + ((xhr.responseJSON && xhr.responseJSON.message) || 'خطای ارتباط')); })
+        .always(function () { b.prop('disabled', false).html('{{ button_charge_wallet }}'); });
+    });
+
+    $('#sync-cities').on('click', function () {
+      var b = $(this).prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+      aj(SYNC_CITIES_URL).done(function (j) { alert(j.success ? '✓ ' + j.message : '✗ ' + (j.message || '')); if (j.success) location.reload(); })
+        .fail(function (xhr) { alert('✗ ' + ((xhr.responseJSON && xhr.responseJSON.message) || 'خطای ارتباط')); })
+        .always(function () { b.prop('disabled', false).html('{{ button_sync_cities }}'); });
+    });
+
+    $('#load-addresses').on('click', function () {
+      var b = $(this).prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+      aj(LOAD_ADDRESSES_URL).done(function (j) {
+        if (j.success) {
+          var opts = '<option value="">{{ text_none }}</option>';
+          (j.addresses || []).forEach(function (a) { opts += '<option value="' + a.tipax_address_id + '">' + (a.full_address || a.tipax_address_id) + '</option>'; });
+          $('#sender-address-select').html(opts);
+          alert('✓ {{ success_addresses_loaded }}');
+        } else alert('✗ ' + (j.message || ''));
+      }).fail(function (xhr) { alert('✗ ' + ((xhr.responseJSON && xhr.responseJSON.message) || 'خطای ارتباط')); })
+        .always(function () { b.prop('disabled', false).html('{{ button_load_addresses }}'); });
+    });
+
+    $('#sender-mode').on('change', function () {
+      var v = $(this).val();
+      $('#sender-saved').toggle(v === 'saved');
+      $('#sender-map').toggle(v !== 'saved');
+      if (v !== 'saved') { initSenderMap(); }
+    });
+
+    function initSenderMap() {
+      var $container = $('#map-sender');
+      var visible = $container.is(':visible');
+      // If container not visible, defer initialization until shown to avoid partial render.
+      if (!visible && !senderMap) {
+        return; // will be called again on tab show or mode change
+      }
+      if (!senderMap) {
+        senderMap = L.map('map-sender');
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(senderMap);
+        // Set a default view to avoid getCenter errors before any view is set
+        senderMap.setView([35.6892, 51.3890], 11); // Tehran default
+        senderMap.on('click', function (e) {
+          if (senderMarker) senderMap.removeLayer(senderMarker);
+          senderMarker = L.marker(e.latlng).addTo(senderMap);
+          $('#sender-lat').val(e.latlng.lat.toFixed(6));
+          $('#sender-lng').val(e.latlng.lng.toFixed(6));
+        });
+      }
+      // Place marker if stored lat/lng provided
+      var lat = parseFloat($('#sender-lat').val());
+      var lng = parseFloat($('#sender-lng').val());
+      if (!isNaN(lat) && !isNaN(lng) && Math.abs(lat) > 0.0001 && Math.abs(lng) > 0.0001) {
+        if (senderMarker) senderMap.removeLayer(senderMarker);
+        senderMarker = L.marker([lat, lng]).addTo(senderMap);
+        senderMap.setView([lat, lng], 13);
+      } else if (senderMap) {
+        // Keep default view set on creation
+        senderMap.setView([35.6892, 51.3890], 11);
+      }
+      // Invalidate size after a tick to ensure correct full render
+      setTimeout(function () { senderMap.invalidateSize(); }, 50);
+    }
+    // Initialize when already in map mode and tab visible
+    if ($('#sender-mode').val() !== 'saved') { initSenderMap(); }
+    // Re-init on bootstrap tab show
+    $('a[href="#tab-sender"]').on('shown.bs.tab', function () { initSenderMap(); });
+    // Also when switching to map mode ensure map is created
+    $('#sender-mode').on('change', function () { if ($(this).val() !== 'saved') { setTimeout(initSenderMap, 10); } });
+
+  })(jQuery);
+</script>
+
+<script>
+  function copyCronUrl() {
+    var inp = document.getElementById('cron-sync-cities-url');
+    if (!inp) return;
+    inp.select();
+    try {
+      if (document.execCommand('copy')) {
+        var btn = event && event.target.closest('button');
+        if (btn) {
+          var old = btn.innerHTML;
+          btn.innerHTML = '<i class="fa fa-check text-success"></i> کپی شد';
+          setTimeout(function () { btn.innerHTML = old; }, 1500);
+        } else {
+          alert('کپی شد');
+        }
+      }
+    } catch (e) {
+      alert('لطفاً به‌صورت دستی کپی کنید');
+    }
+  }
+</script>
+
+
+<script type="text/javascript">
+  function toggleAutoSubmitStatuses() {
+    var autoSubmit = document.getElementById('input-auto-submit').value;
+    var statusesGroup = document.getElementById('auto-submit-statuses-group');
+
+    if (autoSubmit == '1') {
+      statusesGroup.style.display = 'block';
+    } else {
+      statusesGroup.style.display = 'none';
+    }
+  }
+  function toggleAutoSubmitOnStatusChangeStatuses() {
+    var autoSubmitOnStatusChange = document.getElementById('input-auto-submit-on-status-change').value;
+    var statusesGroup = document.getElementById('auto-submit-on-status-change-statuses-group');
+
+    if (autoSubmitOnStatusChange == '1') {
+      statusesGroup.style.display = 'block';
+    } else {
+      statusesGroup.style.display = 'none';
+    }
+  }
+</script>
+
+{{ footer }}

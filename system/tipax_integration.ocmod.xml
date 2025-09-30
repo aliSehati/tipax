@@ -1,0 +1,596 @@
+<?xml version="1.0" encoding="utf-8"?>
+<modification>
+    <name>Tipax Integration</name>
+    <code>tipax_integration</code>
+    <version>1.0.0</version>
+    <author>Tipax Module</author>
+    <description>Integration of Tipax shipping with OpenCart order management</description>
+
+    <!-- Integrate Tipax into order list (actions moved into dropdown; row coloring) -->
+    <file path="admin/view/template/sale/order_list.twig">
+        <!-- Add Tipax actions into the dropdown menu per row -->
+        <operation>
+            <search><![CDATA[<ul class="dropdown-menu dropdown-menu-right">]]></search>
+            <add position="after"><![CDATA[
+                                                {% if shipping_tipax_status and order.shipping_code and order.shipping_code|slice(0, 6) == 'tipax.' %}
+                                                    <li class="dropdown-header">تیپاکس</li>
+                                                    {% set t = order.tipax_order|default(null) %}
+                                                    {% if t %}
+                                                        {% if t.status == 'pending' %}
+                                                            <li><a href="javascript:void(0)" onclick="submitToTipax({{ order.order_id }})"><i class="fa fa-paper-plane"></i> ارسال به تیپاکس</a></li>
+                                                        {% elseif t.status == 'submitted' %}
+                                                            {% if t.tracking_codes %}
+                                                            <li><a href="javascript:void(0)" onclick="printBarcode('{{ t.tracking_codes }}')"><i class="fa fa-barcode"></i> چاپ بارکد</a></li>
+                                                            {% endif %}
+                                                            <li><a href="javascript:void(0)" onclick="cancelTipax({{ order.order_id }})"><i class="fa fa-times"></i> ابطال سفارش تیپاکس</a></li>
+                                                        {% elseif t.status == 'failed' %}
+                                                            <li><a href="javascript:void(0)" onclick="retryTipax({{ order.order_id }})"><i class="fa fa-refresh"></i> تلاش مجدد</a></li>
+                                                        {% elseif t.status == 'cancelled' %}
+                                                            <li><a href="javascript:void(0)" onclick="submitToTipax({{ order.order_id }})"><i class="fa fa-paper-plane"></i> ارسال مجدد</a></li>
+                                                        {% endif %}
+                                                    {% else %}
+                                                        <li><a href="javascript:void(0)" onclick="submitToTipax({{ order.order_id }})"><i class="fa fa-paper-plane"></i> ارسال به تیپاکس</a></li>
+                                                    {% endif %}
+                                                    <li class="divider"></li>
+                                                {% endif %}
+                        ]]>            </add>
+        </operation>
+        <!-- Add hidden status marker for JS-based row coloring -->
+        <operation>
+            <search><![CDATA[<input type="hidden" name="shipping_code[]" value="{{ order.shipping_code }}" />]]></search>
+            <add position="after"><![CDATA[
+                                        {% if order.shipping_code and order.shipping_code|slice(0, 6) == 'tipax.' %}
+                                        <input type="hidden" class="tipax-status" value="{{ order.tipax_order ? order.tipax_order.status : 'pending' }}" />
+                                        {% endif %}
+                        ]]>            </add>
+        </operation>
+        <!-- Color rows based on Tipax status (very light shades) -->
+        <operation>
+            <search><![CDATA[{{ footer }}]]></search>
+            <add position="before"><![CDATA[
+                                <script>
+                                $(function() {
+                                    try {
+                                        $('table.table.table-bordered.table-hover tbody tr').each(function() {
+                                            var $row = $(this);
+                                            var shipping = ($row.find('input[name="shipping_code[]"]').val() || '').toString();
+                                            if (shipping.indexOf('tipax.') !== 0) return;
+                                            var status = ($row.find('input.tipax-status').val() || '').toString();
+                                            var color = '';
+                                            if (status === 'submitted') color = 'rgba(46, 204, 113, 0.12)';       // green
+                                            else if (status === 'failed') color = 'rgba(231, 76, 60, 0.12)';      // red
+                                            else if (status === 'cancelled') color = 'rgba(149, 165, 166, 0.12)';// gray
+                                            else color = 'rgba(243, 156, 18, 0.12)';                              // orange (pending/not submitted)
+                                            if (color) {
+                                                $row.find('td').css('background-color', color);
+                                            }
+                                        });
+                                    } catch (e) { /* no-op */ }
+                                });
+                                </script>
+                        ]]>            </add>
+        </operation>
+        <operation>
+            <search><![CDATA[<a href="{{ add }}" data-toggle="tooltip" title="{{ button_add }}" class="btn btn-primary"><i class="fa fa-plus"></i></a> </div>]]></search>
+            <add position="before"><![CDATA[
+                {% if shipping_tipax_status %}
+                    <a href="{{ orders_url }}" data-toggle="tooltip" title="مدیریت سفارشات تیپاکس" class="btn btn-warning"><i class="fa fa-list"></i></a>
+                {% endif %}
+            ]]>            </add>
+        </operation>
+        <operation>
+            <search><![CDATA[{{ footer }}]]></search>
+            <add position="before"><![CDATA[
+                <script>
+            function submitToTipax(orderId) {
+                if (!confirm('سفارش به تیپاکس ارسال شود؟')) return;
+                
+                $.ajax({
+                    url: 'index.php?route=extension/shipping/tipax&action=submit_order&order_id=' + orderId + '&user_token={{ user_token }}',
+                    method: 'GET',
+                    beforeSend: function() {
+                        showLoading('در حال ارسال سفارش به تیپاکس...');
+                    }
+                }).done(function() {
+                    location.reload();
+                }).fail(function() {
+                    hideLoading();
+                    alert('خطا در ارسال به تیپاکس');
+                }).always(function() {
+                    hideLoading();
+                });
+            }
+
+            function cancelTipax(orderId) {
+                if (!confirm('سفارش تیپاکس ابطال شود؟')) return;
+                
+                $.ajax({
+                    url: 'index.php?route=extension/shipping/tipax&action=cancel_order&user_token={{ user_token }}',
+                    method: 'POST',
+                    dataType: 'json',
+                    data: {order_id: orderId},
+                    beforeSend: function() {
+                        showLoading('در حال ابطال سفارش تیپاکس...');
+                    }
+                }).done(function(json) {
+                    hideLoading();
+                    alert((json.success ? '✓ ' : '✗ ') + (json.message || ''));
+                    if (json.success) location.reload();
+                }).fail(function() {
+                    hideLoading();
+                    alert('خطا در ابطال سفارش');
+                });
+            }
+
+            function retryTipax(orderId) {
+                if (!confirm('سفارش مجدداً به تیپاکس ارسال شود؟')) return;
+                
+                $.ajax({
+                    url: 'index.php?route=extension/shipping/tipax&action=submit_order&order_id=' + orderId + '&user_token={{ user_token }}',
+                    method: 'GET',
+                    beforeSend: function() {
+                        showLoading('در حال تلاش مجدد برای ارسال به تیپاکس...');
+                    }
+                }).done(function() {
+                    location.reload();
+                }).fail(function() {
+                    hideLoading();
+                    alert('خطا در ارسال مجدد به تیپاکس');
+                }).always(function() {
+                    hideLoading();
+                });
+            }
+
+            function showLoading(message) {
+                // Remove existing loading if any
+                hideLoading();
+                
+                // Create loading overlay
+                var loadingHtml = '<div id="tipax-loading-overlay" style="' +
+                    'position: fixed; top: 0; left: 0; width: 100%; height: 100%; ' +
+                    'background: rgba(0,0,0,0.5); z-index: 9999; display: flex; ' +
+                    'align-items: center; justify-content: center;">' +
+                    '<div style="background: white; padding: 30px; border-radius: 8px; ' +
+                    'text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">' +
+                    '<i class="fa fa-spinner fa-spin fa-3x" style="color: #337ab7; margin-bottom: 15px;"></i>' +
+                    '<div style="font-size: 16px; color: #333; direction: rtl;">' + message + '</div>' +
+                    '</div></div>';
+                
+                $('body').append(loadingHtml);
+            }
+
+            function hideLoading() {
+                $('#tipax-loading-overlay').remove();
+            }
+            function printBarcode(trackingCodes) {
+                // Create a new window for printing
+                var printWindow = window.open('', '_blank', 'width=1000,height=500');
+                
+                // Generate barcode HTML
+                var barcodeHtml = '<!DOCTYPE html>' +
+                    '<html>' +
+                    '<head>' +
+                        '<title>بارکد تیپاکس</title>' +
+                        '<script src="view/javascript/barcode/JsBarcode.all.min.js"><\/script>' +
+                        '<style>' +
+                            'body { font-family: Arial, sans-serif; text-align: center; padding: 20px; direction: rtl; }' +
+                            '.barcode-container { margin: 20px 0; }' +
+                            '.tracking-code { font-size: 14px; margin: 10px 0; font-weight: bold; }' +
+                            '@media print { body { margin: 0; padding: 10px; } .no-print { display: none; } }' +
+                        '</style>' +
+                    '</head>' +
+                    '<body>' +
+                        '<h3 class="no-print">بارکد تیپاکس</h3>' +
+                        '<div class="barcode-container">' +
+                            '<svg id="barcode"></svg>' +
+                            '<div class="tracking-code no-print">کد رهگیری: ' + trackingCodes + '</div>' +
+                        '</div>' +
+                        '<button onclick="window.print()" class="no-print" style="margin: 10px; padding: 10px 20px;">چاپ</button>' +
+                        '<button onclick="window.close()" class="no-print" style="margin: 10px; padding: 10px 20px;">بستن</button>' +
+                        '<script>' +
+                            'window.onload = function() {' +
+                                'try {' +
+                                    'JsBarcode("#barcode", "' + trackingCodes + '", {' +
+                                        'format: "CODE128",' +
+                                        'width: 2,' +
+                                        'height: 100,' +
+                                        'displayValue: false,' +
+                                        'fontSize: 14,' +
+                                        'margin: 10' +
+                                    '});' +
+                                    'setTimeout(function() { window.print(); }, 500);' +
+                                '} catch (error) {' +
+                                    'document.getElementById("barcode").innerHTML = "<p>خطا در تولید بارکد</p>";' +
+                                '}' +
+                            '};' +
+                        '<\/script>' +
+                    '</body>' +
+                    '</html>';
+                
+                // Write HTML to the new window
+                printWindow.document.write(barcodeHtml);
+                printWindow.document.close();
+            }
+                </script>
+            ]]>            </add>
+        </operation>
+    </file>
+
+    <!-- Add Tipax order data to order list controller -->
+    <file path="admin/controller/sale/order.php">
+        <operation>
+            <search><![CDATA[$data['invoice'] = $this->url->link('sale/order/invoice', 'user_token=' . $this->session->data['user_token'], true);]]></search>
+            <add position="before"><![CDATA[
+                $data['orders_url']          = html_entity_decode($this->url->link('extension/shipping/tipax', 'user_token=' . $this->session->data['user_token'] . '&action=orders', true));
+                $data['shipping_tipax_status'] = $this->config->get('shipping_tipax_status');
+                // load js barcode library
+                $this->document->addScript('view/javascript/barcode/JsBarcode.all.min.js');
+            ]]>            </add>
+        </operation>
+        <operation>
+            <search><![CDATA[$data['orders'][] = array(]]></search>
+            <add position="before"><![CDATA[
+                // Load Tipax order data if exists
+                $tipax_order = null;
+                if (strpos($result['shipping_code'], 'tipax.') === 0) {
+                    $tipax_query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "tipax_orders` WHERE order_id = '" . (int)$result['order_id'] . "'");
+                    if ($tipax_query->num_rows) {
+                        $tipax_order = $tipax_query->row;
+                    }
+                }
+            ]]>            </add>
+        </operation>
+        <operation>
+            <search><![CDATA[$data['orders'][] = array(]]></search>
+            <add position="after"><![CDATA[
+                'tipax_order'    => $tipax_order,]]></add>
+        </operation>
+        <operation>
+            <search><![CDATA[public function info() {]]></search>
+            <add position="after"><![CDATA[
+            // load js barcode library
+            $this->document->addScript('view/javascript/barcode/JsBarcode.all.min.js');
+            ]]>            </add>
+        </operation>
+        <operation>
+            <search><![CDATA[$this->response->setOutput($this->load->view('sale/order_info', $data));]]></search>
+            <add position="before"><![CDATA[
+            // Load Tipax order data if this is a Tipax order
+            $data['tipax_order'] = [];
+            if (isset($order_info['shipping_code']) && strpos($order_info['shipping_code'], 'tipax.') === 0) {
+                $this->load->model('extension/shipping/tipax');
+                $tipax_query = $this->model_extension_shipping_tipax->getTipaxOrder($this->request->get['order_id']);
+				$data['shipping_code'] = $order_info['shipping_code'];
+                if($tipax_query) {
+                    $data['tipax_order'] = [
+                        'order_id' => $tipax_query['order_id'],
+                        'tipax_order_id' => $tipax_query['tipax_order_id'],
+                        'tracking_codes' => $tipax_query['tracking_codes'],
+                        'status' => $tipax_query['status'],
+                        'created_at' => call_function($this->language->get('function_date'), $this->language->get('date_format_custom_1'), strtotime($tipax_query['created_at'])),
+                        'updated_at' => call_function($this->language->get('function_date'), $this->language->get('date_format_custom_1'), strtotime($tipax_query['updated_at'])),
+                    ];
+                }
+            }
+            ]]>            </add>
+        </operation>
+    </file>
+
+    <!-- Add Tipax tracking info to order info page -->
+    <file path="admin/view/template/sale/order_info.twig">
+        <operation>
+            <search index='4'><![CDATA[<div class="panel panel-default">]]></search>
+            <add position="before"><![CDATA[
+                {% if shipping_code and shipping_code|slice(0, 6) == 'tipax.' %}
+                <div class="panel panel-default">
+                    <div class="panel-heading">
+                        <h3 class="panel-title"><i class="fa fa-truck"></i> تیپاکس</h3>
+                    </div>
+                    <div class="panel-body">
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <td class="text-left" colspan="2"><strong>اطلاعات تیپاکس</strong></td>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if tipax_order %}
+                                        <tr>
+                                            <td class="text-left" style="width: 50%;"><strong>وضعیت:</strong></td>
+                                            <td class="text-left">
+                                                {% if tipax_order.status == 'pending' %}
+                                                    <span class="label label-warning">در انتظار ارسال</span>
+                                                {% elseif tipax_order.status == 'submitted' %}
+                                                    <span class="label label-success">ارسال شده</span>
+                                                {% elseif tipax_order.status == 'failed' %}
+                                                    <span class="label label-danger">خطا در ارسال</span>
+                                                    {% if tipax_order.retry_count > 0 %}
+                                                        <small>({{ tipax_order.retry_count }} تلاش)</small>
+                                                    {% endif %}
+                                                {% elseif tipax_order.status == 'cancelled' %}
+                                                    <span class="label label-default">ابطال شده</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        
+                                        {% if tipax_order.status == 'failed' and tipax_order.error_message %}
+                                        <tr>
+                                            <td class="text-left"><strong>پیام خطا:</strong></td>
+                                            <td class="text-left">
+                                                <div class="alert alert-danger" style="margin: 0; padding: 10px;">
+                                                    <i class="fa fa-exclamation-triangle"></i> {{ tipax_order.error_message }}
+                                                    {% if tipax_order.last_error_at %}
+                                                        <br><small class="text-muted">آخرین خطا: {{ tipax_order.last_error_at }}</small>
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endif %}
+                                        
+                                        {% if tipax_order.tipax_order_id %}
+                                        <tr>
+                                            <td class="text-left"><strong>شناسه سفارش تیپاکس:</strong></td>
+                                            <td class="text-left">{{ tipax_order.tipax_order_id }}</td>
+                                        </tr>
+                                        {% endif %}
+                                        
+                                        {% if tipax_order.tracking_codes %}
+                                        <tr>
+                                            <td class="text-left"><strong>کد رهگیری:</strong></td>
+                                            <td class="text-left">
+                                                <strong style="font-family: monospace; font-size: 14px;">{{ tipax_order.tracking_codes }}</strong>
+                                                <button type="button" class="btn btn-xs btn-default" onclick="copyToClipboard('{{ tipax_order.tracking_codes }}', this)" title="کپی">
+                                                    <i class="fa fa-copy"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-left"><strong>بارکد:</strong></td>
+                                            <td class="text-left">
+                                                <div id="barcode-{{ tipax_order.order_id }}" style="margin: 10px 0;"></div>
+                                                <button type="button" class="btn btn-xs btn-info" onclick="printBarcode('{{ tipax_order.tracking_codes }}')" title="چاپ بارکد">
+                                                    <i class="fa fa-print"></i> چاپ
+                                                </button>
+                                                <script>
+                                                    // Auto-generate barcode when page loads
+                                                    $(document).ready(function() {
+                                                        try {
+                                                            var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                                                            document.getElementById('barcode-{{ tipax_order.order_id }}').appendChild(svg);
+                                                            
+                                                            JsBarcode(svg, '{{ tipax_order.tracking_codes }}', {
+                                                                format: "CODE128",
+                                                                width: 2,
+                                                                height: 60,
+                                                                displayValue: false,
+                                                                fontSize: 12,
+                                                                margin: 5
+                                                            });
+                                                        } catch (error) {
+                                                            console.error('Error auto-generating barcode:', error);
+                                                        }
+                                                    });
+                                                </script>
+                                            </td>
+                                        </tr>
+                                        {% endif %}
+                                        
+                                        <tr>
+                                            <td class="text-left"><strong>تاریخ ایجاد:</strong></td>
+                                            <td class="text-left">{{ tipax_order.created_at }}</td>
+                                        </tr>
+                                        
+                                        {% if tipax_order.updated_at != tipax_order.created_at %}
+                                        <tr>
+                                            <td class="text-left"><strong>آخرین بروزرسانی:</strong></td>
+                                            <td class="text-left">{{ tipax_order.updated_at }}</td>
+                                        </tr>
+                                        {% endif %}
+                                        
+                                    {% else %}
+                                        <tr>
+                                            <td class="text-left"><strong>وضعیت:</strong></td>
+                                            <td class="text-left">
+                                                <span class="label label-info">آماده ارسال</span>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-center" colspan="2">
+                                                <div class="alert-info" style="margin: 10px 0;padding: 15px;">
+                                                    <i class="fa fa-info-circle"></i> این سفارش با روش حمل تیپاکس است اما هنوز به تیپاکس ارسال نشده است.
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endif %}
+                                    
+                                    <tr>
+                                        <td class="text-left"><strong>عملیات:</strong></td>
+                                        <td class="text-left">
+                                            {% if tipax_order %}
+                                                {% if tipax_order.status == 'pending' %}
+                                                    <button type="button" class="btn btn-success btn-sm" onclick="submitToTipax({{ tipax_order.order_id }})" title="ارسال به تیپاکس">
+                                                        <i class="fa fa-paper-plane"></i> ارسال به تیپاکس
+                                                    </button>
+                                                {% elseif tipax_order.status == 'submitted' %}
+                                                    <button type="button" class="btn btn-danger btn-sm" onclick="cancelTipaxOrder({{ tipax_order.order_id }})" title="ابطال سفارش تیپاکس">
+                                                        <i class="fa fa-times"></i> ابطال سفارش
+                                                    </button>
+                                                {% elseif tipax_order.status == 'failed' %}
+                                                    <button type="button" class="btn btn-warning btn-sm" onclick="submitToTipax({{ tipax_order.order_id }})" title="تلاش مجدد برای ارسال به تیپاکس">
+                                                        <i class="fa fa-refresh"></i> تلاش مجدد
+                                                    </button>
+                                                {% elseif tipax_order.status == 'cancelled' %}
+                                                    <button type="button" class="btn btn-success btn-sm" onclick="submitToTipax({{ tipax_order.order_id }})" title="ارسال مجدد به تیپاکس">
+                                                        <i class="fa fa-paper-plane"></i> ارسال مجدد
+                                                    </button>
+                                                {% endif %}
+                                            {% else %}
+                                                <button type="button" class="btn btn-success btn-sm" onclick="submitToTipax({{ order_id }})" title="ارسال به تیپاکس">
+                                                    <i class="fa fa-paper-plane"></i> ارسال به تیپاکس
+                                                </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            ]]>            </add>
+        </operation>
+        <operation>
+            <search><![CDATA[{{ footer }}]]></search>
+            <add position="before"><![CDATA[
+            
+            <script>
+            function cancelTipaxOrder(orderId) {
+                if (!confirm('آیا مطمئن هستید که می‌خواهید این سفارش تیپاکس را ابطال کنید؟')) return;
+                
+                $.ajax({
+                    url: 'index.php?route=extension/shipping/tipax&action=cancel_order&user_token={{ user_token }}',
+                    method: 'POST',
+                    dataType: 'json',
+                    data: {order_id: orderId},
+                    beforeSend: function() {
+                        showLoading('در حال ابطال سفارش تیپاکس...');
+                    }
+                }).done(function(json) {
+                    hideLoading();
+                    alert((json.success ? '✓ ' : '✗ ') + (json.message || ''));
+                    if (json.success) location.reload();
+                }).fail(function() {
+                    hideLoading();
+                    alert('خطا در ابطال سفارش تیپاکس');
+                });
+            }
+
+            function copyToClipboard(text, element) {
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(text).then(function() {
+                        showCopySuccess(element, text);
+                    });
+                } else {
+                    // Fallback for older browsers
+                    var textArea = document.createElement("textarea");
+                    textArea.value = text;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    showCopySuccess(element, text);
+                }
+            }
+
+            function showCopySuccess(element, text) {
+                // Create success message
+                var successMsg = $('<span class="copy-success" style="color: #5cb85c; margin-right: 10px; font-size: 12px;"><i class="fa fa-check"></i> کپی شد</span>');
+                
+                // Add message next to the element
+                $(element).after(successMsg);
+                
+                // Remove message after 2 seconds
+                setTimeout(function() {
+                    successMsg.fadeOut(function() {
+                        successMsg.remove();
+                    });
+                }, 2000);
+            }
+
+            function submitToTipax(orderId) {
+                if (!confirm('سفارش به تیپاکس ارسال شود؟')) return;
+                
+                $.ajax({
+                    url: 'index.php?route=extension/shipping/tipax&action=submit_order&order_id=' + orderId + '&user_token={{ user_token }}',
+                    method: 'GET',
+                    beforeSend: function() {
+                        showLoading('در حال ارسال سفارش به تیپاکس...');
+                    }
+                }).done(function() {
+                    location.reload();
+                }).fail(function() {
+                    hideLoading();
+                    alert('خطا در ارسال به تیپاکس');
+                }).always(function() {
+                    hideLoading();
+                });
+            }
+
+            function printBarcode(trackingCodes) {
+                // Create a new window for printing
+                var printWindow = window.open('', '_blank', 'width=1000,height=500');
+                
+                // Generate barcode HTML
+                var barcodeHtml = '<!DOCTYPE html>' +
+                    '<html>' +
+                    '<head>' +
+                        '<title>بارکد تیپاکس</title>' +
+                        '<script src="view/javascript/barcode/JsBarcode.all.min.js"><\/script>' +
+                        '<style>' +
+                            'body { font-family: Arial, sans-serif; text-align: center; padding: 20px; direction: rtl; }' +
+                            '.barcode-container { margin: 20px 0; }' +
+                            '.tracking-code { font-size: 14px; margin: 10px 0; font-weight: bold; }' +
+                            '@media print { body { margin: 0; padding: 10px; } .no-print { display: none; } }' +
+                        '</style>' +
+                    '</head>' +
+                    '<body>' +
+                        '<h3 class="no-print">بارکد تیپاکس</h3>' +
+                        '<div class="barcode-container">' +
+                            '<svg id="barcode"></svg>' +
+                            '<div class="tracking-code no-print">کد رهگیری: ' + trackingCodes + '</div>' +
+                        '</div>' +
+                        '<button onclick="window.print()" class="no-print" style="margin: 10px; padding: 10px 20px;">چاپ</button>' +
+                        '<button onclick="window.close()" class="no-print" style="margin: 10px; padding: 10px 20px;">بستن</button>' +
+                        '<script>' +
+                            'window.onload = function() {' +
+                                'try {' +
+                                    'JsBarcode("#barcode", "' + trackingCodes + '", {' +
+                                        'format: "CODE128",' +
+                                        'width: 2,' +
+                                        'height: 100,' +
+                                        'displayValue: false,' +
+                                        'fontSize: 14,' +
+                                        'margin: 10' +
+                                    '});' +
+                                    'setTimeout(function() { window.print(); }, 500);' +
+                                '} catch (error) {' +
+                                    'document.getElementById("barcode").innerHTML = "<p>خطا در تولید بارکد</p>";' +
+                                '}' +
+                            '};' +
+                        '<\/script>' +
+                    '</body>' +
+                    '</html>';
+                
+                // Write HTML to the new window
+                printWindow.document.write(barcodeHtml);
+                printWindow.document.close();
+            }
+
+            function showLoading(message) {
+                // Remove existing loading if any
+                hideLoading();
+                
+                // Create loading overlay
+                var loadingHtml = '<div id="tipax-loading-overlay" style="' +
+                    'position: fixed; top: 0; left: 0; width: 100%; height: 100%; ' +
+                    'background: rgba(0,0,0,0.5); z-index: 9999; display: flex; ' +
+                    'align-items: center; justify-content: center;">' +
+                    '<div style="background: white; padding: 30px; border-radius: 8px; ' +
+                    'text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">' +
+                    '<i class="fa fa-spinner fa-spin fa-3x" style="color: #337ab7; margin-bottom: 15px;"></i>' +
+                    '<div style="font-size: 16px; color: #333; direction: rtl;">' + message + '</div>' +
+                    '</div></div>';
+                
+                $('body').append(loadingHtml);
+            }
+
+            function hideLoading() {
+                $('#tipax-loading-overlay').remove();
+            }
+            </script>
+            ]]>            </add>
+        </operation>
+    </file>
+
+</modification>
