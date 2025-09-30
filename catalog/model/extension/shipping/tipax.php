@@ -390,7 +390,10 @@ class ModelExtensionShippingTipax extends Model {
 
             if ($sender_mode === 'saved' && $sender_originId) {
                 $pkgItem = [
-                    'originId' => (int)$sender_originId,
+                    // v4: use senderAddressAndClient with addressId
+                    'senderAddressAndClient' => [
+                        'addressId' => (int)$sender_originId
+                    ],
                     'destination' => [
                         'cityId' => (int)$destCityId,
                         'fullAddress' => trim($order_info['shipping_address_1'] . ' ' . $order_info['shipping_address_2']),
@@ -529,12 +532,13 @@ class ModelExtensionShippingTipax extends Model {
                 $tracking_codes = '';
                 $tracking_codes_with_titles = '';
 
-                if (isset($data['trackingCodes']) && is_array($data['trackingCodes'])) {
-                    $tracking_codes = implode(',', $data['trackingCodes']);
-                }
-
+                // Prefer v4 trackingCodesWithTitles
                 if (isset($data['trackingCodesWithTitles']) && is_array($data['trackingCodesWithTitles'])) {
                     $tracking_codes_with_titles = json_encode($data['trackingCodesWithTitles'], JSON_UNESCAPED_UNICODE);
+                    $onlyCodes = array_filter(array_map(function($x){ return $x['trackingCode'] ?? null; }, $data['trackingCodesWithTitles']));
+                    if (!empty($onlyCodes)) $tracking_codes = implode(',', $onlyCodes);
+                } elseif (isset($data['trackingCodes']) && is_array($data['trackingCodes'])) {
+                    $tracking_codes = implode(',', $data['trackingCodes']);
                 }
 
                 $tipax_order_id = $data['orderId'] ?? '';
@@ -671,7 +675,7 @@ class ModelExtensionShippingTipax extends Model {
         $serviceId   = ($originCityId && (int)$destCityId === $originCityId) ? 7 : 4;
 
         if ($sender_mode === 'saved' && $sender_originId) {
-            // Use WithOriginAddressId API
+            // Use WithOriginAddressId API (origin.id is used by Pricing/WithOriginAddressId)
             $base = [
                 'origin' => ['id' => (int)$sender_originId],
                 'destination' => ['cityId' => (int)$destCityId],

@@ -88,6 +88,16 @@
             </div>
           </div>
           <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-env">{{ entry_env }}</label>
+            <div class="col-sm-10">
+              <select name="shipping_tipax_env" id="input-env" class="form-control">
+                <option value="test" {% if shipping_tipax_env != 'prod' %} selected{% endif %}>{{ text_env_test }}</option>
+                <option value="prod" {% if shipping_tipax_env == 'prod' %} selected{% endif %}>{{ text_env_prod }}</option>
+              </select>
+              <div class="help-block">{{ help_env }}</div>
+            </div>
+          </div>
+          <div class="form-group">
             <label class="col-sm-2 control-label" for="input-status">{{ entry_status }}</label>
             <div class="col-sm-10">
               <select name="shipping_tipax_status" id="input-status" class="form-control">

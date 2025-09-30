@@ -5,7 +5,8 @@ class Tipax {
     protected $log;
     protected $cache;
 
-    protected $api_base_url = 'https://omtestapi.tipax.ir';
+    // Default to TIPAX test gateway; can be overridden by config env switch
+    protected $api_base_url = 'https://IGTGatewayApiTest.tipax.ir';
 
     // Safety margin before expiry (seconds)
     protected $expiry_margin = 60;
@@ -65,7 +66,8 @@ class Tipax {
             'password' => $password,
             'apiKey'   => $api_key,
         ];
-        $res = $this->request('POST', '/api/OM/v3/Account/token', null, $payload, false);
+        // V4 login
+        $res = $this->request('POST', '/api/OM/v4/Account/token', null, $payload, false);
         if ($res['code'] === 200 && !empty($res['body'])) {
             $data = json_decode($res['body'], true);
             // Support both flat and nested response shapes
@@ -90,19 +92,20 @@ class Tipax {
     protected function refreshToken($accessToken, $refreshToken) {
         if (!$refreshToken) return false;
 
-        // Some APIs expect both access and refresh tokens. We'll send both defensively.
+        // V4 expects: { token, refreshToken }
         $payload = [
+            'token'        => $accessToken,
             'refreshToken' => $refreshToken,
-            'accessToken'  => $accessToken,
         ];
-        $res = $this->request('POST', '/api/OM/v3/Account/RefreshToken', null, $payload, false);
+        $res = $this->request('POST', '/api/OM/v4/Account/RefreshToken', null, $payload, false);
         if ($res['code'] === 200 && !empty($res['body'])) {
             $data = json_decode($res['body'], true);
             $d = isset($data['data']) ? $data['data'] : $data;
 
-            $newAccess  = $d['accessToken']  ?? null;
-            $newRefresh = $d['refreshToken'] ?? $refreshToken; // may or may not rotate
-            $expiresIn  = (int)($d['expiresIn'] ?? ($d['expireIn'] ?? 0));
+            // V4 returns snake_case inside data: { access_token, refresh_token, expires_in }
+            $newAccess  = $d['access_token']  ?? ($d['accessToken']  ?? null);
+            $newRefresh = $d['refresh_token'] ?? ($d['refreshToken'] ?? $refreshToken); // may or may not rotate
+            $expiresIn  = (int)($d['expires_in'] ?? ($d['expiresIn'] ?? ($d['expireIn'] ?? 0)));
             $expiresAt  = $expiresIn > 0 ? (time() + max(0, $expiresIn - $this->expiry_margin)) : (time() + 600);
 
             if ($newAccess) {
@@ -153,7 +156,7 @@ class Tipax {
     // ========== Pricing ==========
     public function pricing($token, array $packageInputs) {
         $payload = ['packageInputs' => $packageInputs];
-        $res = $this->request('POST', '/api/OM/v3/Pricing', $token, $payload);
+        $res = $this->request('POST', '/api/OM/v4/Pricing', $token, $payload);
         if ($res['code'] === 200 && strlen($res['body'])) {
             return json_decode($res['body'], true);
         }
@@ -174,7 +177,7 @@ class Tipax {
             $payload['customerId'] = (int)$customerId;
         }
 
-        $res = $this->request('POST', '/api/OM/v3/Pricing/WithOriginAddressId', $token, $payload);
+        $res = $this->request('POST', '/api/OM/v4/Pricing/WithOriginAddressId', $token, $payload);
         if ($res['code'] === 200 && strlen($res['body'])) {
             return json_decode($res['body'], true);
         }
@@ -183,7 +186,7 @@ class Tipax {
 
     // ========== Cities ==========
     public function citiesPlusState($token) {
-        $res = $this->request('GET', '/api/OM/v3/Cities/plusstate', $token);
+        $res = $this->request('GET', '/api/OM/v4/Cities/plusstate', $token);
         if ($res['code'] === 200 && strlen($res['body'])) {
             return json_decode($res['body'], true);
         }
@@ -192,7 +195,7 @@ class Tipax {
 
     // ========== Wallet ==========
     public function walletBalance($token) {
-        $res = $this->request('GET', '/api/OM/v3/Customers/Wallet', $token);
+        $res = $this->request('GET', '/api/OM/v4/Customers/Wallet', $token);
         if ($res['code'] === 200 && strlen($res['body'])) {
             // API returns plain number string
             return (float)$res['body'];
@@ -205,7 +208,7 @@ class Tipax {
             'amount' => (float)$amount,
             'frontCallBackUrl' => $callback_url
         ];
-        $res = $this->request('POST', '/api/OM/v3/Customers/RechargeWallet', $token, $payload);
+        $res = $this->request('POST', '/api/OM/v4/Customers/RechargeWallet', $token, $payload);
         if ($res['code'] === 200 && strlen($res['body'])) {
             return json_decode($res['body'], true);
         }
@@ -214,7 +217,7 @@ class Tipax {
 
     // ========== Addresses ==========
     public function addressesBook($token) {
-        $res = $this->request('GET', '/api/OM/v3/Addresses/Book', $token);
+        $res = $this->request('GET', '/api/OM/v4/Addresses/Book', $token);
         if ($res['code'] === 200 && strlen($res['body'])) {
             return json_decode($res['body'], true);
         }
@@ -223,7 +226,8 @@ class Tipax {
 
     // ========== Orders ==========
     public function submitOrders($token, array $payload) {
-        $res = $this->request('POST', '/api/OM/v3/Orders', $token, $payload);
+        // V4 unified endpoint
+        $res = $this->request('POST', '/api/OM/v4/OmOrder', $token, $payload);
         if ($res['code'] === 200 && strlen($res['body'])) {
             return json_decode($res['body'], true);
         }
@@ -231,17 +235,19 @@ class Tipax {
     }
 
     public function submitWithPredefinedOrigin($token, array $payload) {
-        $res = $this->request('POST', '/api/OM/v3/Orders/WithPreDefinedOrigin', $token, $payload);
+        // V4 unified endpoint (use senderAddressAndClient.addressId inside payload)
+        $res = $this->request('POST', '/api/OM/v4/OmOrder', $token, $payload);
         if ($res['code'] === 200 && strlen($res['body'])) {
             return json_decode($res['body'], true);
         }
         return $this->handleApiError($res);
     }
 
-    public function cancelOrder($token, $tipax_order_id) {
-        $res = $this->request('POST', '/api/OM/v3/Orders/CancelOrder/' . rawurlencode((string)$tipax_order_id), $token);
-        if ($res['code'] === 200 && strlen($res['body'])) {
-            return json_decode($res['body'], true);
+    // V4: cancel by tracking code
+    public function cancelParcelByTracking($token, $trackingCode) {
+        $res = $this->request('PUT', '/api/OM/v4/Parcels/Cancel/' . rawurlencode((string)$trackingCode), $token);
+        if ($res['code'] === 200) {
+            return strlen($res['body']) ? json_decode($res['body'], true) : true;
         }
         return $this->handleApiError($res);
     }
@@ -349,14 +355,15 @@ class Tipax {
     }
 
     protected function execCurl($method, $path, $token = null, $payload = null) {
-        $ch = curl_init();
-        $headers = ['Content-Type: application/json'];
+        
+    $ch = curl_init();
+    // Default Accept supports both JSON and plain text (some endpoints like Cancel return plain text)
+    $headers = ['Accept: application/json, text/plain'];
         if ($token) $headers[] = 'Authorization: Bearer ' . $token;
 
         $opts = [
-            CURLOPT_URL => $this->api_base_url . $path,
+            CURLOPT_URL => $this->getBaseUrl() . $path,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => $headers,
             CURLOPT_CONNECTTIMEOUT => 15,
             CURLOPT_TIMEOUT => 60,
         ];
@@ -364,14 +371,27 @@ class Tipax {
         $method = strtoupper($method);
         if ($method === 'POST') {
             $opts[CURLOPT_POST] = true;
-            if ($payload !== null) $opts[CURLOPT_POSTFIELDS] = json_encode($payload);
+            if ($payload !== null) {
+                $opts[CURLOPT_POSTFIELDS] = json_encode($payload);
+                $headers[] = 'Content-Type: application/json';
+            }
         } elseif ($method === 'PUT' || $method === 'PATCH') {
             $opts[CURLOPT_CUSTOMREQUEST] = $method;
-            if ($payload !== null) $opts[CURLOPT_POSTFIELDS] = json_encode($payload);
+            if ($payload !== null) {
+                $opts[CURLOPT_POSTFIELDS] = json_encode($payload);
+                $headers[] = 'Content-Type: application/json';
+            } else {
+                // Some servers (IIS) require a Content-Length for PUT/PATCH even with empty body
+                $opts[CURLOPT_POSTFIELDS] = '';
+                $headers[] = 'Content-Length: 0';
+            }
         } else {
             $opts[CURLOPT_HTTPGET] = true;
         }
 
+        // Apply headers after any possible additions
+        $opts[CURLOPT_HTTPHEADER] = $headers;
+        
         curl_setopt_array($ch, $opts);
         $body = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -382,5 +402,16 @@ class Tipax {
             if ($this->log) $this->log->write('Tipax API error: ' . $err . ' on ' . $path);
         }
         return ['code' => (int)$code, 'body' => (string)$body, 'error' => $err];
+    }
+
+    protected function getBaseUrl() {
+        return "https://omtestapi.tipax.ir"; // Default to test
+        // Allow switching between Test/Prod via admin config
+        $env = (string)$this->config->get('shipping_tipax_env'); // 'test' or 'prod'
+        if (strtolower($env) === 'prod' || $env === '1') {
+            return 'https://IGTGatewayApi.Tipax.Ir';
+        }
+        // default to test
+        return 'https://IGTGatewayApiTest.tipax.ir';
     }
 }

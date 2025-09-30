@@ -15,7 +15,22 @@ class ControllerExtensionShippingTipax extends Controller {
         }
 
         if ($this->request->server['REQUEST_METHOD'] == 'POST' && $this->validate()) {
+            // If env or credentials changed, clear token cache
+            $prev_env = (string)$this->config->get('shipping_tipax_env');
+            $prev_user = (string)$this->config->get('shipping_tipax_username');
+            $prev_pass = (string)$this->config->get('shipping_tipax_password');
+            $prev_key  = (string)$this->config->get('shipping_tipax_api_key');
+            $new_env = (string)($this->request->post['shipping_tipax_env'] ?? $prev_env);
+            $new_user = (string)($this->request->post['shipping_tipax_username'] ?? $prev_user);
+            $new_pass = (string)($this->request->post['shipping_tipax_password'] ?? $prev_pass);
+            $new_key  = (string)($this->request->post['shipping_tipax_api_key'] ?? $prev_key);
+
             $this->model_setting_setting->editSetting('shipping_tipax', $this->request->post);
+
+            if ($new_env !== $prev_env || $new_user !== $prev_user || $new_pass !== $prev_pass || $new_key !== $prev_key) {
+                $this->load->library('tipax');
+                $this->tipax->clearTokenCache();
+            }
             $this->session->data['success'] = $this->language->get('text_success');
             // $this->response->redirect($this->url->link('marketplace/extension', 'user_token=' . $this->session->data['user_token'] . '&type=shipping', true));
             $this->response->redirect($this->url->link('extension/shipping/tipax', 'user_token=' . $this->session->data['user_token'], true));
@@ -259,6 +274,7 @@ class ControllerExtensionShippingTipax extends Controller {
             'shipping_tipax_username',
             'shipping_tipax_password',
             'shipping_tipax_api_key',
+            'shipping_tipax_env',
             'shipping_tipax_status',
             'shipping_tipax_sort_order',
             'shipping_tipax_payment_type',
@@ -587,7 +603,7 @@ class ControllerExtensionShippingTipax extends Controller {
         $data['filter_urls'] = [
             'unmatched' => html_entity_decode($this->url->link('extension/shipping/tipax', 'user_token=' . $token . '&action=state_mapping&filter=unmatched&q=' . urlencode($q) . '&limit=' . $limit, true)),
             'matched'   => html_entity_decode($this->url->link('extension/shipping/tipax', 'user_token=' . $token . '&action=state_mapping&filter=matched&q=' . urlencode($q) . '&limit=' . $limit, true)),
-            'all'       => html_entity_decode($this->url->link('extension/shipping/tipax', 'user_token=' . $token . '&action=state_mapping&q=' . urlencode($q) . '&limit=' . $limit, true)),
+            'all'       => html_entity_decode($this->url->link('extension/shipping/tipax', 'user_token=' . $token . '&action=state_mapping&filter=all&q=' . urlencode($q) . '&limit=' . $limit, true)),
         ];
 
         $data['search_action']       = html_entity_decode($this->url->link('extension/shipping/tipax', 'user_token=' . $token . '&action=state_mapping', true));

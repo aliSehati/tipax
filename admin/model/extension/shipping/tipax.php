@@ -747,18 +747,38 @@ class ModelExtensionShippingTipax extends Model {
 
     public function cancelOrder($order_id) {
         $row = $this->getTipaxOrder($order_id);
-        if (!$row || empty($row['tipax_order_id'])) return false;
+        if (!$row) return false;
 
         $this->load->library('tipax');
         $token = $this->tipax->getApiToken();
         if (!$token) return false;
 
-        $res = $this->tipax->cancelOrder($token, $row['tipax_order_id']);
-        if ($res !== false) {
-            $this->db->query("UPDATE `" . DB_PREFIX . "tipax_orders` SET status='cancelled', updated_at=NOW() WHERE order_id='" . (int)$order_id . "'");
-            return $res;
+        // v4: cancel requires tracking code(s). Gather them from saved fields.
+        $codes = [];
+        if (!empty($row['tracking_codes'])) {
+            $codes = array_filter(array_map('trim', explode(',', $row['tracking_codes'])));
         }
-        return false;
+        if (empty($codes) && !empty($row['tracking_codes_with_titles'])) {
+            $dec = json_decode($row['tracking_codes_with_titles'], true);
+            if (is_array($dec)) {
+                foreach ($dec as $it) {
+                    if (!empty($it['trackingCode'])) $codes[] = $it['trackingCode'];
+                }
+            }
+        }
+        if (empty($codes)) return false;
+
+        $allOk = true;
+        foreach ($codes as $code) {
+            $res = $this->tipax->cancelParcelByTracking($token, $code);
+            if ($res === false || (is_array($res) && isset($res['success']) && $res['success'] === false)) {
+                $allOk = false; // continue attempts for other codes
+            }
+        }
+        if ($allOk) {
+            $this->db->query("UPDATE `" . DB_PREFIX . "tipax_orders` SET status='cancelled', updated_at=NOW() WHERE order_id='" . (int)$order_id . "'");
+        }
+        return $allOk;
     }
 
     private function computePackageFromOrder($order_id) {
@@ -954,7 +974,10 @@ class ModelExtensionShippingTipax extends Model {
 
             if ($sender_mode === 'saved' && $sender_originId) {
                 $pkgItem = [
-                    'originId' => (int)$sender_originId,
+                    // v4: use senderAddressAndClient with addressId
+                    'senderAddressAndClient' => [
+                        'addressId' => (int)$sender_originId
+                    ],
                     'destination' => [
                         'cityId' => (int)$destCityId,
                         'fullAddress' => trim($order_info['shipping_address_1'] . ' ' . $order_info['shipping_address_2']),
@@ -1095,12 +1118,13 @@ class ModelExtensionShippingTipax extends Model {
                 $tracking_codes = '';
                 $tracking_codes_with_titles = '';
 
-                if (isset($data['trackingCodes']) && is_array($data['trackingCodes'])) {
-                    $tracking_codes = implode(',', $data['trackingCodes']);
-                }
-
+                // Prefer v4 trackingCodesWithTitles -> extract plain codes for convenience
                 if (isset($data['trackingCodesWithTitles']) && is_array($data['trackingCodesWithTitles'])) {
                     $tracking_codes_with_titles = json_encode($data['trackingCodesWithTitles'], JSON_UNESCAPED_UNICODE);
+                    $onlyCodes = array_filter(array_map(function($x){ return $x['trackingCode'] ?? null; }, $data['trackingCodesWithTitles']));
+                    if (!empty($onlyCodes)) $tracking_codes = implode(',', $onlyCodes);
+                } elseif (isset($data['trackingCodes']) && is_array($data['trackingCodes'])) {
+                    $tracking_codes = implode(',', $data['trackingCodes']);
                 }
 
                 $tipax_order_id = $data['orderId'] ?? '';
